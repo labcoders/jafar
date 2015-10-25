@@ -16,7 +16,7 @@ data Trend
         deriving (Eq)
 
 data Urgency
-    = NotUrgent 
+    = NotUrgent
     | Urgent
         deriving (Eq)
 
@@ -66,7 +66,7 @@ getStopLoss = do
     pos <- getPosition
     prev <- prevStopLoss
     price <- getPrice
-    sens <- getSensitivity 
+    sens <- getSensitivity
     if price > prev && pos == Long && sens >= 0 && sens <= 1
         then return ((1 - sens*0.2)*price)
     else if price < prev && pos == Short && sens >= 0 && sens <= 1
@@ -80,14 +80,14 @@ interpret GetTrend = do
 
 interpret GetCrossover = do
     cross <- getCrossover
-    return $ Right $ Trend cross 
+    return $ Right $ Trend cross
 
 interpret GetPosition = do
     pos <- getPosition
     return $ Right $ Position pos
 
 interpret GetStopLoss = do
-    stoploss <- getStopLoss 
+    stoploss <- getStopLoss
     return $ Right $ Price stoploss
 
 interpret GetPrice = do
@@ -104,14 +104,14 @@ interpret (If cond aThen aElse) = do
         _ -> error "Error: Type error."
 
 interpret (Compare ord act1 act2) = do
-    let cmp a b = case ord of 
+    let cmp a b = case ord of
             LT -> a < b
             EQ -> a == b
             GT -> a > b
     let eq a b = case ord of
             EQ -> a == b
             _ -> error "Error: Type error."
-        
+
     Right a <- interpret act1
     Right b <- interpret act2
 
