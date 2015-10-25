@@ -6,7 +6,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 import Data.Time (UTCTime())
-import Data.Vector (Vector(), empty)
+import Data.Vector (Vector(), empty, singleton)
 
 data Trend
     = UpTrend
@@ -56,6 +56,8 @@ type Sensitivity = Double
 type Price = Double
 type Capital = Double
 
+type Program = Action
+
 data TimeInterval = TimeInterval
     { startTime :: UTCTime
     , endTime :: UTCTime
@@ -84,13 +86,17 @@ emaScore (EMA s m l)
 
 data Algorithm = Algorithm
     { algFreq :: Int -- ^ Number of seconds between nonurgent outcome realizations
-    , algCode :: Jafar Outcome
+    , algCode :: Program
     , algSensitivity :: Sensitivity
     }
 
 data InitialCondition = InitialCondition
     { icStartingCapital :: Capital
     , icTimeInterval :: TimeInterval
+    }
+
+data BacktestDataset = BacktestDataset
+    { bdData :: [(UTCTime, Price)]
     }
 
 data JafarConf = JafarConf
@@ -101,7 +107,8 @@ data JafarConf = JafarConf
     , jcEMABacklog :: Int
     }
 
-data JafarError = TypeError
+data JafarError = TypeError | NoOutcome
+    deriving (Show)
 
 data JafarState = JafarState
     { jsPrevStoploss :: Double
@@ -111,11 +118,13 @@ data JafarState = JafarState
     , jsCurrentTime :: UTCTime
     }
 
-initialJafarState :: JafarState
-initialJafarState = JafarState
+initialJafarState :: InitialCondition -> Price -> JafarState
+initialJafarState ic p = JafarState
     { jsPrevStoploss = 0
     , jsPosition = NoPosition
-    , jsEMA = empty
+    , jsEMA = singleton $ EMA p p p
+    , jsLastPrices = empty
+    , jsCurrentTime = startTime $ icTimeInterval ic
     }
 
 newtype Jafar a = Jafar
@@ -125,4 +134,13 @@ newtype Jafar a = Jafar
                                            IO))
                   a
     }
-    deriving (Functor, Applicative, Monad, MonadError JafarError, MonadState JafarState, MonadReader JafarConf)
+    deriving ( Functor
+             , Applicative
+             , Monad
+             , MonadError JafarError
+             , MonadState JafarState
+             , MonadReader JafarConf
+             )
+
+data BacktestResult = ResultSuccess | ResultFailure
+    deriving (Show)

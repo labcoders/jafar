@@ -3,19 +3,28 @@ module Interpreter where
 import Types
 import Sugar
 
+import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
 import qualified Data.Vector as V
 
-getTrend = undefined
-
-getCrossover :: Jafar Trend
-getCrossover = do
-    score <- emaScore . V.head <$> gets jsEMA
+getTrend :: Jafar Trend
+getTrend = do
+    score <- V.sum . V.map emaScore <$> gets jsEMA
     return $
         if score > 0
             then UpTrend
             else DownTrend
+
+getCrossover :: Jafar Trend
+getCrossover = do
+    score <- (fmap . fmap) emaScore . fmap (V.!? 0) $ gets jsEMA
+    case score of
+        Nothing -> error "no head"
+        Just x -> return $
+            if x > 0
+                then UpTrend
+                else DownTrend
 
 addPrice :: Price -> Jafar ()
 addPrice p = do
@@ -73,9 +82,6 @@ getStopLoss = do
     else if price < prev && pos == Short && sens >= 0 && sens <= 1
         then return ((1 + sens*0.2)*price)
     else return prev
-
-askJafar :: Algorithm -> JafarState -> IO (Either JafarError JafarState)
-askJafar a js = undefined
 
 interpret :: Action -> Jafar (Either Outcome Value)
 interpret GetTrend = do
@@ -136,3 +142,31 @@ interpret (Not act) = do
         ValBool b -> return $ Right (ValBool (not b))
         _ -> error "Error: Type error."
 
+requireOutcomeLeft :: Either Outcome b -> Jafar Outcome
+requireOutcomeLeft (Left o) = return o
+requireOutcomeLeft (Right _) = throwError NoOutcome
+
+backtest :: Algorithm -> InitialCondition -> BacktestDataset -> IO BacktestResult
+backtest alg ic ds = do
+    let js = initialJafarState ic (snd . head . bdData $ ds)
+    let jc = JafarConf { jcSensitivity = algSensitivity alg
+                       , jcTimeInterval = icTimeInterval ic
+                       , jcStartingCapital = icStartingCapital ic
+                       , jcEMASizes = (5, 9, 12)
+                       , jcEMABacklog = 5
+                       }
+    (e, js') <- runStateT
+             (runReaderT
+                 (runExceptT
+                     (runJafar $
+                         interpret (algCode alg) >>= requireOutcomeLeft))
+             jc)
+         js
+    case e of
+        Left error -> do
+            putStrLn $ "Error occurred: " ++ show error
+            undefined
+        Right s -> do
+            print s
+
+    return ResultSuccess
