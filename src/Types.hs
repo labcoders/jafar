@@ -1,7 +1,12 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Types where
 
+import Control.Monad.Reader
 import Control.Monad.State
+import Control.Monad.Except
 import Data.Time (UTCTime())
+import Data.Vector (Vector(), empty)
 
 data Trend
     = UpTrend
@@ -49,4 +54,75 @@ data Value
 
 type Sensitivity = Double
 type Price = Double
+type Capital = Double
 
+data TimeInterval = TimeInterval
+    { startTime :: UTCTime
+    , endTime :: UTCTime
+    }
+
+timeInterval :: UTCTime -> UTCTime -> Maybe TimeInterval
+timeInterval t1 t2
+    | t1 < t2 = Just $ TimeInterval t1 t2
+    | otherwise = Nothing
+
+data EMA = EMA
+    { emaShort :: Price
+    , emaMedium :: Price
+    , emaLong :: Price
+    }
+
+emaScore :: EMA -> Double
+emaScore (EMA s m l)
+    | cmp m s l = -1
+    | cmp l s m = 1
+    | cmp s m l = -5
+    | cmp l m s = 5
+    | cmp s l m = -7
+    | cmp m l s = 7
+    where cmp x y z = x <= y && y <= z
+
+data Algorithm = Algorithm
+    { algFreq :: Int -- ^ Number of seconds between nonurgent outcome realizations
+    , algCode :: Jafar Outcome
+    , algSensitivity :: Sensitivity
+    }
+
+data InitialCondition = InitialCondition
+    { icStartingCapital :: Capital
+    , icTimeInterval :: TimeInterval
+    }
+
+data JafarConf = JafarConf
+    { jcSensitivity :: Sensitivity
+    , jcTimeInterval :: TimeInterval
+    , jcStartingCapital :: Capital
+    , jcEMASizes :: (Int, Int, Int)
+    , jcEMABacklog :: Int
+    }
+
+data JafarError = TypeError
+
+data JafarState = JafarState
+    { jsPrevStoploss :: Double
+    , jsPosition :: Position
+    , jsEMA :: Vector EMA
+    , jsLastPrices :: Vector Price
+    , jsCurrentTime :: UTCTime
+    }
+
+initialJafarState :: JafarState
+initialJafarState = JafarState
+    { jsPrevStoploss = 0
+    , jsPosition = NoPosition
+    , jsEMA = empty
+    }
+
+newtype Jafar a = Jafar
+    { runJafar :: ExceptT JafarError
+                          (ReaderT JafarConf
+                                   (StateT JafarState
+                                           IO))
+                  a
+    }
+    deriving (Functor, Applicative, Monad, MonadError JafarError, MonadState JafarState, MonadReader JafarConf)

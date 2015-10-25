@@ -3,24 +3,70 @@ module Interpreter where
 import Types
 import Sugar
 
+import Control.Monad.Reader
+import Control.Monad.State
+import qualified Data.Vector as V
+
 getTrend = undefined
-getCrossover = undefined
-getPosition = undefined
-savePosition = undefined
+
+getCrossover :: Jafar Trend
+getCrossover = do
+    score <- emaScore . V.head <$> gets jsEMA
+    return $
+        if score > 0
+            then UpTrend
+            else DownTrend
+
+addPrice :: Price -> Jafar ()
+addPrice p = do
+    (ssz, msz, lsz) <- asks jcEMASizes
+    emas <- gets jsEMA
+    ps <- gets jsLastPrices
+    backlogSize <- asks jcEMABacklog
+
+    let ps' = if V.length ps > max (max ssz msz) lsz
+                  then p `V.cons` (V.init ps)
+                  else p `V.cons` ps
+        psS = V.take ssz ps'
+        psM = V.take msz ps'
+        psL = V.take lsz ps'
+        avg v = V.sum v / fromIntegral (V.length v)
+        s = avg psS
+        m = avg psM
+        l = avg psL
+        emas' = if V.length emas > backlogSize
+                    then EMA s m l `V.cons` (V.init emas)
+                    else EMA s m l `V.cons` emas
+
+    modify $ \s -> s { jsEMA = emas' }
+
+getPosition :: Jafar Position
+getPosition = gets jsPosition
+
+savePosition :: Position -> Jafar ()
+savePosition p = modify $ \s -> s { jsPosition = p }
+
+getPrice :: Jafar Price
 getPrice = undefined
-prevStopLoss = undefined
-getSensitivity = undefined
-saveStopLoss = undefined
 
--- saveStopLoss :: Double -> IO ()
--- saveStopLoss stoploss = do
-    -- SOMETHING IN HASKELL
+getPrevPrice :: Jafar Price
+getPrevPrice = V.head <$> gets jsLastPrices -- TODO account for t_0
 
-getStopLoss :: IO (Double)
+prevStopLoss :: Jafar Double
+prevStopLoss = gets jsPrevStoploss
+
+getSensitivity :: Jafar Sensitivity
+getSensitivity = asks jcSensitivity
+
+saveStopLoss :: Double -> Jafar ()
+saveStopLoss stoploss = modify $ \s -> s { jsPrevStoploss = stoploss }
+
+getStopLoss :: Jafar Double
 getStopLoss = do
     pos <- getPosition
     prev <- prevStopLoss
     price <- getPrice
+    prevPrice <- getPrevPrice
     sens <- getSensitivity
     if price > prev && pos == Long && sens >= 0 && sens <= 1
         then return ((1 - sens*0.2)*price)
@@ -28,7 +74,10 @@ getStopLoss = do
         then return ((1 + sens*0.2)*price)
     else return prev
 
-interpret :: Action -> IO (Either Outcome Value)
+askJafar :: Algorithm -> JafarState -> IO (Either JafarError JafarState)
+askJafar a js = undefined
+
+interpret :: Action -> Jafar (Either Outcome Value)
 interpret GetTrend = do
     trend <- getTrend
     return $ Right $ Trend trend
