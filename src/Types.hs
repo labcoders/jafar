@@ -2,7 +2,7 @@
 
 module Types where
 
-import Control.Applicative hiding empty
+import Control.Applicative hiding (empty)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except

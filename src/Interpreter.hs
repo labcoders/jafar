@@ -3,6 +3,7 @@ module Interpreter where
 import Types
 import Sugar
 
+import Control.Applicative hiding (empty)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
