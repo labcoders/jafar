@@ -57,8 +57,8 @@ data Value
 type Sensitivity = Double
 type Price = Double
 
-saveStopLoss :: Double -> IO ()
-saveStopLoss stoploss = do
+-- saveStopLoss :: Double -> IO ()
+-- saveStopLoss stoploss = do
     -- SOMETHING IN HASKELL
 
 getStopLoss :: IO (Double)
@@ -132,19 +132,33 @@ interpret (Not act) = do
         ValBool b -> return $ Right (ValBool (not b))
         _ -> error "Error: Type error."
 
-emaProg = If (Compare EQ GetPosition (Lit (Position Long)))
-    (If (Compare GT GetPrice GetStopLoss)
-    (If (Not (Compare EQ GetTrend (Lit (Trend DownTrend))))
-    (Emit DoNothing) (Emit (Sell Long NotUrgent)))
-    (Emit (Sell Long Urgent)))
-    (If (Compare EQ GetPosition (Lit (Position Short)))
-    (If (Compare LT GetPrice GetStopLoss)
-    (If (Not (Compare EQ GetTrend (Lit (Trend UpTrend))))
-    (Emit DoNothing) (Emit (Buy Short NotUrgent)))
-    (Emit (Buy Short Urgent)))
-    (If (Not (Compare EQ GetTrend GetCrossover))
-    (If (Compare EQ GetCrossover (Lit (Trend UpTrend)))
-    (Emit (Buy Long NotUrgent)) (Emit (Sell Short NotUrgent)))
-    (Emit DoNothing)))
+a1 #># a2 = Compare GT a1 a2
+a1 #==# a2 = Compare EQ a1 a2
+a1 #!=# a2 = Not (Compare EQ a1 a2)
+a1 #<# a2 = Compare LT a1 a2
+buy pos urg = Emit (Buy pos urg)
+sell pos urg = Emit (Sell pos urg)
+pass = Emit DoNothing
+pos a = Lit (Position a)
+trnd a = Lit (Trend a)
+
+emaProg = If (GetPosition #==# (pos Long))
+             (If (GetPrice #># GetStopLoss)
+                 (If (GetTrend #==# (trnd UpTrend))
+                     pass
+                     (sell Long NotUrgent))
+                 (sell Long Urgent))
+             (If (GetPosition #==# (pos Short))
+                 (If (GetPrice #<# GetStopLoss)
+                     (If (GetTrend #==# (trnd DownTrend))
+                         pass
+                         (buy Short NotUrgent))
+                     (buy Short Urgent))
+                 (If (GetTrend #!=# GetCrossover)
+                     (If (GetCrossover #==# (trnd UpTrend))
+                         (buy Long NotUrgent)
+                         (sell Short NotUrgent))
+                     pass))
+
 main = do
-    putStrLn "Hello world!"
+        putStrLn "Hello world!"
