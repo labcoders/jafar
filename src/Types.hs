@@ -81,6 +81,7 @@ data EMA = EMA
     , emaMedium :: Price
     , emaLong :: Price
     }
+        deriving (Show)
 
 emaScore :: EMA -> Double
 emaScore (EMA s m l)
@@ -125,13 +126,13 @@ data JafarError = TypeError | NoOutcome | IllegalOperation | WrongFunds | NoPric
     deriving (Show)
 
 data JafarState = JafarState
-    { jsPrevStoploss :: Double
-    , jsPosition :: Position
-    , jsEMA :: Vector EMA
-    , jsLastPrices :: Vector Price
-    , jsCurrentTime :: UTCTime
-    , jsFunds :: Funds
-    , jsTransactions :: [Transaction]
+    { jsPrevStoploss :: !Double
+    , jsPosition :: !Position
+    , jsEMA :: !(Vector EMA)
+    , jsLastPrices :: !(Vector Price)
+    , jsCurrentTime :: !UTCTime
+    , jsFunds :: !Funds
+    , jsTransactions :: ![Transaction]
     }
 
 initialJafarState :: InitialCondition -> Price -> JafarState

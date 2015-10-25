@@ -21,13 +21,16 @@ parseTime = T.parseTimeM False T.defaultTimeLocale iso8601
     where iso8601 = T.iso8601DateFormat Nothing
 
 main = do
-    ps <- getChartData AllTime MarketPrice
+    ps <- getChartData Years1 MarketPrice
+    print ps
 
     ps' <- case ps of
         Left e -> do
             putStrLn $ "error " ++ show e
             exitFailure
         Right ps -> return ps
+
+    forM_ (take 3 ps') (putStrLn . show)
 
     let a = Algorithm
                 { algFreq = 10

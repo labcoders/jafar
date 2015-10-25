@@ -17,7 +17,7 @@ getTrend :: Jafar Trend
 getTrend = do
     score <- V.sum . V.map emaScore <$> gets jsEMA
     return $
-        if score > 0
+        if score >= 0
             then UpTrend
             else DownTrend
 
@@ -27,11 +27,14 @@ getCrossover = do
     case score of
         Nothing -> error "no head"
         Just x -> return $
-            if x > 0
+            if x >= 0
                 then UpTrend
                 else DownTrend
 
-addPrice :: Price -> Jafar ()
+setEMAs :: V.Vector EMA -> Jafar ()
+setEMAs emas = modify $ \s -> s { jsEMA = emas }
+
+addPrice :: Price -> Jafar (V.Vector EMA)
 addPrice p = do
     (ssz, msz, lsz) <- asks jcEMASizes
     emas <- gets jsEMA
@@ -52,7 +55,8 @@ addPrice p = do
                     then EMA s m l `V.cons` (V.init emas)
                     else EMA s m l `V.cons` emas
 
-    modify $ \s -> s { jsEMA = emas' }
+    modify $ \s -> s { jsLastPrices = ps' }
+    return emas'
 
 getPosition :: Jafar Position
 getPosition = gets jsPosition
@@ -153,42 +157,57 @@ requireOutcomeLeft :: Either Outcome b -> Jafar Outcome
 requireOutcomeLeft (Left o) = return o
 requireOutcomeLeft (Right _) = throwError NoOutcome
 
-jafarLoop :: Program -> [(UTCTime, Price)] -> Jafar ()
-jafarLoop _ [] = return ()
+jafarLoop :: Program -> [(UTCTime, Price)] -> Jafar Funds
+jafarLoop _ [] = do
+    finalfunds <- gets jsFunds
+    liftIO $ print finalfunds
+    return finalfunds
+
 jafarLoop code (d:ds) = do
+    liftIO $ print (snd d)
     outcome <- interpret code >>= requireOutcomeLeft
+
     currentPrice <- getPrice
+    let p = snd d
+
+    emas <- addPrice p
+    setEMAs emas
+    liftIO $ print (snd d)
     Funds currency holdings oldPrice <- getFunds
 
     m <- case outcome of
         Buy Long u -> do
             case currency of
-                BTC -> throwError WrongFunds
+                BTC -> error "wrong funds error in Buy Long"
                 USD -> do
                     let f = Funds BTC (holdings / currentPrice) currentPrice
+                    savePosition Long
                     return $ Just (Transaction TxBuy BTC holdings currentPrice, f, u)
 
         Buy Short u -> do
             case currency of
-                USD -> throwError WrongFunds
+                USD -> error "Wrong funds error in buy short"
                 BTC -> do
                     let f = Funds USD
                                   (holdings * (2 * oldPrice - currentPrice))
                                   currentPrice
+                    savePosition NoPosition
                     return $ Just (Transaction TxSell BTC holdings currentPrice, f, u)
 
         Sell Long u -> do
             case currency of
-                USD -> throwError WrongFunds
+                USD -> error "wrong funds error in sell long"
                 BTC -> do
                     let f = Funds USD (holdings * currentPrice) currentPrice
+                    savePosition NoPosition
                     return $ Just (Transaction TxSell BTC holdings currentPrice, f, u)
 
         Sell Short u ->
             case currency of
-                BTC -> throwError WrongFunds
+                BTC -> error "wrong funds error in sell short"
                 USD -> do
                     let f = Funds BTC (holdings / currentPrice) currentPrice
+                    savePosition Short
                     return $ Just (Transaction TxBuy BTC holdings currentPrice, f, u)
 
         DoNothing -> return Nothing
@@ -212,9 +231,11 @@ backtest alg ic (BacktestDataset { bdData = ds }) = do
                        , jcEMABacklog = 5
                        }
 
+    putStrLn "starting Jafar"
     (e, js') <- runStateT
              (runReaderT
-                 (runExceptT (runJafar (jafarLoop (algCode alg) ds)))
+                 (runExceptT (runJafar $ do
+                                         (jafarLoop (algCode alg) ds)))
              jc)
          js
 
