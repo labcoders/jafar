@@ -2,6 +2,7 @@
 
 module Types where
 
+import Control.Applicative
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
