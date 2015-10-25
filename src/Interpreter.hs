@@ -7,7 +7,11 @@ import Control.Applicative hiding (empty)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
+import Data.Time (UTCTime())
 import qualified Data.Vector as V
+
+getFunds :: Jafar Funds
+getFunds = gets jsFunds
 
 getTrend :: Jafar Trend
 getTrend = do
@@ -57,7 +61,9 @@ savePosition :: Position -> Jafar ()
 savePosition p = modify $ \s -> s { jsPosition = p }
 
 getPrice :: Jafar Price
-getPrice = undefined
+getPrice = do
+    p <- V.head <$> gets jsLastPrices
+    return p
 
 getPrevPrice :: Jafar Price
 getPrevPrice = V.head <$> gets jsLastPrices -- TODO account for t_0
@@ -147,22 +153,71 @@ requireOutcomeLeft :: Either Outcome b -> Jafar Outcome
 requireOutcomeLeft (Left o) = return o
 requireOutcomeLeft (Right _) = throwError NoOutcome
 
+jafarLoop :: Program -> [(UTCTime, Price)] -> Jafar ()
+jafarLoop _ [] = return ()
+jafarLoop code (d:ds) = do
+    outcome <- interpret code >>= requireOutcomeLeft
+    currentPrice <- getPrice
+    Funds currency holdings oldPrice <- getFunds
+
+    m <- case outcome of
+        Buy Long u -> do
+            case currency of
+                BTC -> throwError WrongFunds
+                USD -> do
+                    let f = Funds BTC (holdings / currentPrice) currentPrice
+                    return $ Just (Transaction TxBuy BTC holdings currentPrice, f, u)
+
+        Buy Short u -> do
+            case currency of
+                USD -> throwError WrongFunds
+                BTC -> do
+                    let f = Funds USD
+                                  (holdings * (2 * oldPrice - currentPrice))
+                                  currentPrice
+                    return $ Just (Transaction TxSell BTC holdings currentPrice, f, u)
+
+        Sell Long u -> do
+            case currency of
+                USD -> throwError WrongFunds
+                BTC -> do
+                    let f = Funds USD (holdings * currentPrice) currentPrice
+                    return $ Just (Transaction TxSell BTC holdings currentPrice, f, u)
+
+        Sell Short u ->
+            case currency of
+                BTC -> throwError WrongFunds
+                USD -> do
+                    let f = Funds BTC (holdings / currentPrice) currentPrice
+                    return $ Just (Transaction TxBuy BTC holdings currentPrice, f, u)
+
+        DoNothing -> return Nothing
+
+    case m of
+        Nothing -> liftIO $ putStrLn "No action"
+        Just (t, f, u) -> do
+            liftIO $ print t
+            modify $ \s -> s
+                { jsFunds = f, jsTransactions = t : jsTransactions s }
+
+    jafarLoop code ds
+
 backtest :: Algorithm -> InitialCondition -> BacktestDataset -> IO BacktestResult
-backtest alg ic ds = do
-    let js = initialJafarState ic (snd . head . bdData $ ds)
+backtest alg ic (BacktestDataset { bdData = ds }) = do
+    let js = initialJafarState ic (snd . head $ ds)
     let jc = JafarConf { jcSensitivity = algSensitivity alg
                        , jcTimeInterval = icTimeInterval ic
                        , jcStartingCapital = icStartingCapital ic
                        , jcEMASizes = (5, 9, 12)
                        , jcEMABacklog = 5
                        }
+
     (e, js') <- runStateT
              (runReaderT
-                 (runExceptT
-                     (runJafar $
-                         interpret (algCode alg) >>= requireOutcomeLeft))
+                 (runExceptT (runJafar (jafarLoop (algCode alg) ds)))
              jc)
          js
+
     case e of
         Left error -> do
             putStrLn $ "Error occurred: " ++ show error

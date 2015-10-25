@@ -6,8 +6,15 @@ import Control.Applicative hiding (empty)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
+import Control.Monad.Trans
 import Data.Time (UTCTime())
 import Data.Vector (Vector(), empty, singleton)
+
+data Currency = BTC | USD
+    deriving (Show)
+
+data Funds = Funds Currency Double Price
+    deriving (Show)
 
 data Trend
     = UpTrend
@@ -100,6 +107,12 @@ data BacktestDataset = BacktestDataset
     { bdData :: [(UTCTime, Price)]
     }
 
+data Tx = TxBuy | TxSell
+    deriving (Show)
+
+data Transaction = Transaction Tx Currency Double Price
+    deriving (Show)
+
 data JafarConf = JafarConf
     { jcSensitivity :: Sensitivity
     , jcTimeInterval :: TimeInterval
@@ -108,7 +121,7 @@ data JafarConf = JafarConf
     , jcEMABacklog :: Int
     }
 
-data JafarError = TypeError | NoOutcome
+data JafarError = TypeError | NoOutcome | IllegalOperation | WrongFunds | NoPrice
     deriving (Show)
 
 data JafarState = JafarState
@@ -117,6 +130,8 @@ data JafarState = JafarState
     , jsEMA :: Vector EMA
     , jsLastPrices :: Vector Price
     , jsCurrentTime :: UTCTime
+    , jsFunds :: Funds
+    , jsTransactions :: [Transaction]
     }
 
 initialJafarState :: InitialCondition -> Price -> JafarState
@@ -126,6 +141,8 @@ initialJafarState ic p = JafarState
     , jsEMA = singleton $ EMA p p p
     , jsLastPrices = empty
     , jsCurrentTime = startTime $ icTimeInterval ic
+    , jsFunds = Funds USD (icStartingCapital ic) 0
+    , jsTransactions = []
     }
 
 newtype Jafar a = Jafar
@@ -141,6 +158,7 @@ newtype Jafar a = Jafar
              , MonadError JafarError
              , MonadState JafarState
              , MonadReader JafarConf
+             , MonadIO
              )
 
 data BacktestResult = ResultSuccess | ResultFailure
