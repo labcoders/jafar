@@ -22,15 +22,12 @@ parseTime = T.parseTimeM False T.defaultTimeLocale iso8601
 
 main = do
     ps <- getChartData Years1 MarketPrice
-    print ps
 
     ps' <- case ps of
         Left e -> do
             putStrLn $ "error " ++ show e
             exitFailure
         Right ps -> return ps
-
-    forM_ (take 3 ps') (putStrLn . show)
 
     let a = Algorithm
                 { algFreq = 10
@@ -46,5 +43,6 @@ main = do
         d = BacktestDataset
                 { bdData = map (\(ChartPoint x y) -> (btcTime x, y)) ps'
                 }
+
     result <- backtest a i d
     print result
