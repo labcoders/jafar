@@ -46,35 +46,18 @@ main = do
                 }
 
     result <- backtest a i d
-    let ts = jsTransactions result
-    forM_ ts $ \(Transaction tx pos amt curr price time) -> do
-        putStrLn $ intercalate "," $ case (tx, curr) of
-            (TxBuy, BTC) -> [ show time
-                            , show tx
-                            , show pos
-                            , show amt ++ " BTC"
-                            , show (amt*price) ++ " USD"
-                            , show price
-                            ]
-            (TxSell, BTC) -> [ show time
-                             , show tx
-                             , show pos
-                             , show amt ++ " BTC"
-                             , show (amt*price) ++ " USD"
-                             , show price
-                             ]
-            (TxBuy, USD) -> [ show time
-                            , show tx
-                            , show pos
-                            , show (amt/price) ++ " BTC"
-                            , show amt ++ " USD"
-                            , show price
-                            ]
-            (TxSell, USD) -> [ show time
-                             , show tx
-                             , show pos
-                             , show (amt/price) ++ " BTC"
-                             , show amt ++ " USD"
-                             , show price
-                             ]
-        
+
+    case result of
+        Nothing -> return ()
+        Just result -> do
+            let ts = reverse $ jsTransactions result
+            forM_ ts $ \t@(Transaction tx pos amt curr price time) -> do
+                putStrLn $ intercalate 
+                           "," 
+                           [ show time
+                           , show tx
+                           , show pos
+                           , show (txValue t BTC) ++ " BTC"
+                           , show (txValue t USD) ++ " USD"
+                           , show price
+                           ]

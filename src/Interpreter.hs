@@ -24,9 +24,7 @@ savePosition p = modify $ \s -> s { jsPosition = p }
 
 -- | Gets the current price of Bitcoin.
 getPrice :: Jafar Price
-getPrice = do
-    p <- V.head <$> gets jsLastPrices
-    return p
+getPrice = V.head <$> gets jsLastPrices
 
 -- | Gets the price of Bitcoin effective on the last iteration of the
 -- algorithm.
@@ -264,7 +262,11 @@ jafarLoop code (d:ds) = do
 
 -- | Backtests an "Algorithm" with a given "InitialCondition" on a given
 -- "BacktestDataset".
-backtest :: Algorithm -> InitialCondition -> BacktestDataset -> IO JafarState
+backtest :: Algorithm -- ^ The trading algorithm to backtest.
+         -> InitialCondition -- ^ The initial conditions of the backtester.
+         -> BacktestDataset -- ^ The dataset to backtest with.
+         -> IO (Maybe JafarState)
+         -- ^ The final state of the backtester, if successful.
 backtest alg ic (BacktestDataset { bdData = ds }) = do
     let js = initialJafarState ic (snd . head $ ds)
     let jc = JafarConf { jcSensitivity = algSensitivity alg
@@ -284,6 +286,7 @@ backtest alg ic (BacktestDataset { bdData = ds }) = do
     case e of
         Left error -> do
             putStrLn $ "Error occurred: " ++ show error
+            return Nothing
         Right s -> do
-            return ()
-    return js'
+            print s
+            return (Just js')

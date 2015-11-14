@@ -152,8 +152,26 @@ data BacktestDataset = BacktestDataset
 data Tx = TxBuy | TxSell
     deriving (Show)
 
-data Transaction = Transaction Tx Position Double Currency Price UTCTime
+data Transaction = Transaction
+    { txType :: Tx
+    , txPosition :: Position
+    , txAmount :: Double
+    , txCurrency :: Currency
+    , txActivePrice :: Price
+    , txTime :: UTCTime
+    }
     deriving (Show)
+
+txValue :: Transaction -> Currency -> Double
+txValue tx c' =
+    case (c, c') of
+        (BTC, BTC) -> amt
+        (USD, USD) -> amt
+        (USD, BTC) -> amt / price
+        (BTC, USD) -> amt * price
+    where c = txCurrency tx
+          amt = txAmount tx
+          price = txActivePrice tx
 
 -- | The configuration of a Jafar backtester.
 --
@@ -212,7 +230,7 @@ data JafarState = JafarState
     , jsTransactions :: ![Transaction]
     -- ^ A history of executed transactions.
     }
-        deriving (Show)
+    deriving (Show)
 
 -- | Builds an initial "JafarState" given an "InitialCondition" and a starting
 -- "Price" of Bitcoin.
