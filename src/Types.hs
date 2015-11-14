@@ -152,18 +152,7 @@ data BacktestDataset = BacktestDataset
 data Tx = TxBuy | TxSell
     deriving (Show)
 
--- | A transaction is to either buy or sell currency in some amount at some
--- Bitcoin price.
-data Transaction = Transaction
-    { txType :: Tx
-    -- ^ The type of transaction.
-    , txCurrency :: Currency
-    -- ^ The currency type of the transaction.
-    , txUnits :: Double
-    -- ^ The number of units of currency being transacted.
-    , txBitcoinPrice :: Price
-    -- ^ The price of bitcoin effective for the transaction.
-    }
+data Transaction = Transaction Tx Position Double Currency Price UTCTime
     deriving (Show)
 
 -- | The configuration of a Jafar backtester.
@@ -223,6 +212,7 @@ data JafarState = JafarState
     , jsTransactions :: ![Transaction]
     -- ^ A history of executed transactions.
     }
+        deriving (Show)
 
 -- | Builds an initial "JafarState" given an "InitialCondition" and a starting
 -- "Price" of Bitcoin.

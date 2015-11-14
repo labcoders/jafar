@@ -3,11 +3,12 @@
 module Main where
 
 import Control.Monad.State
+import Data.List (intercalate)
 import Data.Maybe (fromMaybe)
 import Data.Time.Clock
 import qualified Data.Time as T
 import Data.String
-import Network.Blockchain
+import qualified Network.Blockchain as B
 import System.Exit (exitFailure)
 
 import Types
@@ -21,7 +22,7 @@ parseTime = T.parseTimeM False T.defaultTimeLocale iso8601
     where iso8601 = T.iso8601DateFormat Nothing
 
 main = do
-    ps <- getChartData Years1 MarketPrice
+    ps <- B.getChartData B.Years1 B.MarketPrice
 
     ps' <- case ps of
         Left e -> do
@@ -41,8 +42,39 @@ main = do
                                                            "2015-10-30")
                 }
         d = BacktestDataset
-                { bdData = map (\(ChartPoint x y) -> (btcTime x, y)) ps'
+                { bdData = map (\(B.ChartPoint x y) -> (B.btcTime x, y)) ps'
                 }
 
     result <- backtest a i d
-    print result
+    let ts = jsTransactions result
+    forM_ ts $ \(Transaction tx pos amt curr price time) -> do
+        putStrLn $ intercalate "," $ case (tx, curr) of
+            (TxBuy, BTC) -> [ show time
+                            , show tx
+                            , show pos
+                            , show amt ++ " BTC"
+                            , show (amt*price) ++ " USD"
+                            , show price
+                            ]
+            (TxSell, BTC) -> [ show time
+                             , show tx
+                             , show pos
+                             , show amt ++ " BTC"
+                             , show (amt*price) ++ " USD"
+                             , show price
+                             ]
+            (TxBuy, USD) -> [ show time
+                            , show tx
+                            , show pos
+                            , show (amt/price) ++ " BTC"
+                            , show amt ++ " USD"
+                            , show price
+                            ]
+            (TxSell, USD) -> [ show time
+                             , show tx
+                             , show pos
+                             , show (amt/price) ++ " BTC"
+                             , show amt ++ " USD"
+                             , show price
+                             ]
+        

@@ -195,6 +195,7 @@ jafarLoop code (d:ds) = do
     -- fetch the current price of Bitcoin; this value is recorded into the
     -- transactions stored in the log, so we need to fetch it now before
     -- updating the price list.
+    let time = fst d
     currentPrice <- getPrice
 
     -- add the next price of Bitcoin to the list of prices, and compute the new
@@ -212,43 +213,50 @@ jafarLoop code (d:ds) = do
     -- decision made by the trade decision procedure makes sense. If so,
     -- record the resulting transaction to the log and update the trader's
     -- funds.
-    let m = case outcome of
-            Buy Long u -> Just $
-                case currency of
-                    BTC -> error "wrong funds error in Buy Long"
-                    USD -> let f = Funds BTC (holdings / currentPrice) currentPrice
-                               s = Long
-                               in (Transaction TxBuy BTC holdings currentPrice, f, u, s)
+    m <- case outcome of
+        Buy Long u -> do
+            case currency of
+                BTC -> error "wrong funds error in Buy Long"
+                USD -> do
+                    let x = holdings / currentPrice
+                    let f = Funds BTC x currentPrice
+                    savePosition Long
+                    return $ Just (Transaction TxBuy Long x BTC currentPrice time, f, u)
 
-            Buy Short u -> Just $
-                case currency of
-                    USD -> error "Wrong funds error in buy short"
-                    BTC -> let f = Funds USD
-                                      (holdings * (2 * oldPrice - currentPrice))
-                                      currentPrice
-                               s = NoPosition
-                               in (Transaction TxSell BTC holdings currentPrice, f, u, s)
+        Buy Short u -> do
+            case currency of
+                USD -> error "Wrong funds error in buy short"
+                BTC -> do
+                    let x = holdings * (2 * oldPrice - currentPrice)
+                    let f = Funds USD
+                                  x
+                                  currentPrice
+                    savePosition NoPosition
+                    return $ Just (Transaction TxBuy NoPosition x USD currentPrice time, f, u)
 
-            Sell Long u -> Just $
-                case currency of
-                    USD -> error "wrong funds error in sell long"
-                    BTC -> let f = Funds USD (holdings * currentPrice) currentPrice
-                               s = NoPosition
-                               in (Transaction TxSell BTC holdings currentPrice, f, u, s)
+        Sell Long u -> do
+            case currency of
+                USD -> error "wrong funds error in sell long"
+                BTC -> do
+                    let x = holdings * currentPrice
+                    let f = Funds USD x currentPrice
+                    savePosition NoPosition
+                    return $ Just (Transaction TxSell NoPosition x USD currentPrice time, f, u)
 
-            Sell Short u -> Just $
-                case currency of
-                    BTC -> error "wrong funds error in sell short"
-                    USD -> let f = Funds BTC (holdings / currentPrice) currentPrice
-                               s = Short
-                               in (Transaction TxBuy BTC holdings currentPrice, f, u, s)
+        Sell Short u ->
+            case currency of
+                BTC -> error "wrong funds error in sell short"
+                USD -> do
+                    let x = holdings / currentPrice
+                    let f = Funds BTC x currentPrice
+                    savePosition Short
+                    return $ Just (Transaction TxSell Short x BTC currentPrice time, f, u)
 
-            DoNothing -> Nothing
+        DoNothing -> return Nothing
 
     case m of
         Nothing -> return ()
-        Just (t, f, u, s) -> do
-            savePosition s
+        Just (t, f, u) -> do
             modify $ \s -> s
                 { jsFunds = f, jsTransactions = t : jsTransactions s }
 
@@ -256,7 +264,7 @@ jafarLoop code (d:ds) = do
 
 -- | Backtests an "Algorithm" with a given "InitialCondition" on a given
 -- "BacktestDataset".
-backtest :: Algorithm -> InitialCondition -> BacktestDataset -> IO BacktestResult
+backtest :: Algorithm -> InitialCondition -> BacktestDataset -> IO JafarState
 backtest alg ic (BacktestDataset { bdData = ds }) = do
     let js = initialJafarState ic (snd . head $ ds)
     let jc = JafarConf { jcSensitivity = algSensitivity alg
@@ -266,7 +274,6 @@ backtest alg ic (BacktestDataset { bdData = ds }) = do
                        , jcEMABacklog = 5
                        }
 
-    putStrLn "starting Jafar"
     (e, js') <- runStateT
              (runReaderT
                  (runExceptT (runJafar $ do
@@ -277,7 +284,6 @@ backtest alg ic (BacktestDataset { bdData = ds }) = do
     case e of
         Left error -> do
             putStrLn $ "Error occurred: " ++ show error
-            return ResultFailure
         Right s -> do
-            print s
-            return ResultSuccess
+            return ()
+    return js'
