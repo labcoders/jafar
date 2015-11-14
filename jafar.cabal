@@ -24,6 +24,8 @@ executable jafar
     time >= 1.4 && < 1.6,
     mtl >= 2.2 && < 2.3,
     vector >= 0.11 && < 0.12,
-    blockchain-conduit >=0.1 && <0.2
+    blockchain-conduit >=0.1 && <0.2,
+    Chart >=1.5 && <1.6,
+    Chart-cairo >=1.5 && <1.6
   hs-source-dirs:      src
   default-language:    Haskell2010

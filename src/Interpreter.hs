@@ -26,6 +26,10 @@ savePosition p = modify $ \s -> s { jsPosition = p }
 getPrice :: Jafar Price
 getPrice = V.head <$> gets jsLastPrices
 
+-- | Gets the last EMA triple computed by the trader.
+getLastEMA :: Jafar EMA
+getLastEMA = V.head <$> gets jsEMA
+
 -- | Gets the price of Bitcoin effective on the last iteration of the
 -- algorithm.
 getPrevPrice :: Jafar Price
@@ -181,11 +185,8 @@ requireOutcomeLeft (Right _) = throwError NoOutcome
 --
 -- Each iteration of the loop will update the relevant fields of the
 -- "JafarState", and record any transactions to the log.
-jafarLoop :: Program -> [(UTCTime, Price)] -> Jafar Funds
-jafarLoop _ [] = do
-    finalfunds <- gets jsFunds
-    return finalfunds
-
+jafarLoop :: Program -> [(UTCTime, Price)] -> Jafar [JafarIteration]
+jafarLoop _ [] = pure []
 jafarLoop code (d:ds) = do
     -- run the trade decision procedure
     outcome <- interpret code >>= requireOutcomeLeft
@@ -252,20 +253,28 @@ jafarLoop code (d:ds) = do
 
         DoNothing -> return Nothing
 
-    case m of
-        Nothing -> return ()
+    t <- case m of
+        Nothing -> do
+            return Nothing
         Just (t, f, u) -> do
-            modify $ \s -> s
-                { jsFunds = f, jsTransactions = t : jsTransactions s }
+            modify $ \s -> s { jsFunds = f }
+            return $ Just t
 
-    jafarLoop code ds
+    ema <- getLastEMA
+
+    let iter = JafarIteration { jiTransaction = t
+                              , jiEMA = ema
+                              }
+
+    l <- jafarLoop code ds
+    return $ iter : l
 
 -- | Backtests an "Algorithm" with a given "InitialCondition" on a given
 -- "BacktestDataset".
 backtest :: Algorithm -- ^ The trading algorithm to backtest.
          -> InitialCondition -- ^ The initial conditions of the backtester.
          -> BacktestDataset -- ^ The dataset to backtest with.
-         -> IO (Maybe JafarState)
+         -> IO (Maybe [JafarIteration])
          -- ^ The final state of the backtester, if successful.
 backtest alg ic (BacktestDataset { bdData = ds }) = do
     let js = initialJafarState ic (snd . head $ ds)
@@ -287,6 +296,5 @@ backtest alg ic (BacktestDataset { bdData = ds }) = do
         Left error -> do
             putStrLn $ "Error occurred: " ++ show error
             return Nothing
-        Right s -> do
-            print s
-            return (Just js')
+        Right iters -> do
+            return (Just iters)

@@ -227,8 +227,6 @@ data JafarState = JafarState
     -- trade decision procedure.
     , jsFunds :: !Funds
     -- ^ The funds held by the trader.
-    , jsTransactions :: ![Transaction]
-    -- ^ A history of executed transactions.
     }
     deriving (Show)
 
@@ -242,7 +240,6 @@ initialJafarState ic p = JafarState
     , jsLastPrices = empty
     , jsCurrentTime = startTime $ icTimeInterval ic
     , jsFunds = Funds USD (icStartingCapital ic) 0
-    , jsTransactions = []
     }
 
 -- | The Jafar monad is capable of throwing a "JafarError", reading from a
@@ -264,6 +261,7 @@ newtype Jafar a = Jafar
              , MonadIO
              )
 
--- | The result of a backtest.
-data BacktestResult = ResultSuccess | ResultFailure
-    deriving (Show)
+data JafarIteration = JafarIteration
+    { jiTransaction :: Maybe Transaction
+    , jiEMA :: EMA
+    }
